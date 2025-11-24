@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forth言語インタプリタ実装演習</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reset.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/white.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
+    <style>
+        .reveal h1, .reveal h2, .reveal h3 {
+            text-transform: none;
+        }
+        .reveal pre {
+            width: 100%;
+            font-size: 0.55em;
+        }
+        .reveal pre code {
+            max-height: 500px;
+            padding: 15px;
+        }
+        .reveal table {
+            font-size: 0.7em;
+            margin: 0 auto;
+        }
+        .reveal th, .reveal td {
+            padding: 0.3em 0.6em;
+            border: 1px solid #ccc;
+        }
+        .reveal th {
+            background-color: #f0f0f0;
+        }
+        .reveal .small {
+            font-size: 0.7em;
+        }
+        .reveal .highlight-box {
+            background-color: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 10px 15px;
+            margin: 10px 0;
+            text-align: left;
+        }
+        .reveal .two-column {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+        }
+        .reveal .two-column > div {
+            flex: 1;
+            max-width: 45%;
+        }
+        .reveal .stack-viz {
+            font-family: monospace;
+            font-size: 0.6em;
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            display: inline-block;
+        }
+        
+        /* フロー図用のスタイル */
+        .flow-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .flow-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            justify-content: center;
+        }
+        .flow-box {
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            text-align: center;
+            min-width: 120px;
+        }
+        .flow-box.source {
+            background-color: #fff3e0;
+            border: 2px solid #ff9800;
+            color: #e65100;
+        }
+        .flow-box.process {
+            background-color: #e3f2fd;
+            border: 2px solid #2196f3;
+            color: #1565c0;
+        }
+        .flow-box.output {
+            background-color: #e8f5e9;
+            border: 2px solid #4caf50;
+            color: #2e7d32;
+        }
+        .flow-box.token {
+            background-color: #fce4ec;
+            border: 2px solid #e91e63;
+            color: #c2185b;
+        }
+        .flow-box.decision {
+            background-color: #f3e5f5;
+            border: 2px solid #9c27b0;
+            color: #7b1fa2;
+            transform: rotate(0deg);
+        }
+        .flow-arrow {
+            font-size: 1.5em;
+            color: #666;
+        }
+        .flow-arrow.down {
+            font-size: 1.2em;
+        }
+        .flow-label {
+            font-size: 0.7em;
+            color: #666;
+            margin-top: -5px;
+        }
+        
+        /* 比較図用 */
+        .compare-container {
+            display: flex;
+            gap: 40px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        .compare-box {
+            padding: 20px;
+            border-radius: 12px;
+            width: 600px;
+        }
+        .compare-box.compiler {
+            background-color: #fff8e1;
+            border: 2px solid #ffc107;
+        }
+        .compare-box.interpreter {
+            background-color: #e8f5e9;
+            border: 2px solid #4caf50;
+        }
+        .compare-box h4 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ccc;
+        }
+        .compare-flow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .compare-flow .step {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            width: 80%;
+            text-align: center;
+        }
+        .compare-flow .step.code {
+            background-color: rgba(0,0,0,0.05);
+        }
+        .compare-flow .step.tool {
+            background-color: rgba(0,0,0,0.1);
+            font-weight: bold;
+        }
+        .compare-flow .step.result {
+            background-color: rgba(0,0,0,0.15);
+        }
+        .compare-flow .arrow {
+            color: #666;
+        }
+        .examples {
+            font-size: 0.75em;
+            color: #666;
+            margin-top: 10px;
+        }
+        
+        /* 評価ループ図 */
+        .eval-loop-container {
+            position: relative;
+            margin: 20px auto;
+            width: 900px;
+        }
+        .eval-main-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .eval-box {
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .eval-box.read {
+            background-color: #bbdefb;
+            border: 2px solid #1976d2;
+        }
+        .eval-box.get {
+            background-color: #c8e6c9;
+            border: 2px solid #388e3c;
+        }
+        .eval-box.eval {
+            background-color: #ffccbc;
+            border: 2px solid #e64a19;
+        }
+        .eval-branches {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+        }
+        .eval-branch {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .eval-branch .condition {
+            padding: 10px 20px;
+            background-color: #e1bee7;
+            border: 2px solid #8e24aa;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        .eval-branch .action {
+            padding: 8px 16px;
+            background-color: #f5f5f5;
+            border: 1px solid #999;
+            border-radius: 5px;
+            font-size: 0.8em;
+        }
+        .loop-arrow {
+            position: absolute;
+            right: 50px;
+            top: 0;
+            width: 80px;
+            height: 60px;
+            border: 3px solid #666;
+            border-left: none;
+            border-bottom: none;
+            border-radius: 0 20px 0 0;
+        }
+        .loop-arrow::after {
+            content: '↑';
+            position: absolute;
+            left: -15px;
+            top: 40px;
+            font-size: 1.5em;
+            color: #666;
+        }
+        
+        /* 字句解析図 */
+        .lexer-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .lexer-row {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+        .lexer-input {
+            padding: 15px 30px;
+            background-color: #fff3e0;
+            border: 2px solid #ff9800;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 1.1em;
+        }
+        .lexer-process {
+            padding: 20px;
+            background-color: #e3f2fd;
+            border: 2px solid #2196f3;
+            border-radius: 50%;
+            text-align: center;
+        }
+        .lexer-process .title {
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .lexer-process .sub {
+            font-size: 0.7em;
+            color: #666;
+        }
+        .lexer-output {
+            display: flex;
+            gap: 8px;
+        }
+        .lexer-token {
+            padding: 10px 15px;
+            background-color: #e8f5e9;
+            border: 2px solid #4caf50;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        .big-arrow {
+            font-size: 2em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+            <!-- タイトルスライド -->
+            <section>
+                <h1>Forth言語インタプリタ<br>実装演習</h1>
+                <p class="small">スタックベース言語とインタプリタの仕組み</p>
+                <p>2025年11月26日 伊澤侑祐</p>
+            </section>
+
+            <!-- 目次 -->
+            <section>
+                <h2>本日の内容</h2>
+                <ol>
+                    <li>Forth とは</li>
+                    <li>動的言語とインタプリタ</li>
+                    <li>スタックとForthでの使い方</li>
+                    <li>参照実装</li>
+                    <li>演習問題</li>
+                </ol>
+            </section>
+
+                        <!-- セクション2: Forth言語とは -->
+            <section>
+                <section>
+                    <h2>1. Forth言語とは</h2>
+                </section>
+
+                <section>
+                    <h3>歴史と背景</h3>
+                    <ul>
+                        <li><strong>1970年代</strong>: Charles H. Moore が開発</li>
+                        <li class="fragment">もともと<strong>天文台の望遠鏡制御</strong>のために設計</li>
+                        <li class="fragment">その後、様々な分野で利用:
+                            <ul>
+                                <li>組み込み・制御システム</li>
+                                <li>宇宙開発</li>
+                                <ul><li><a href=https://www.forth.com/resources/space-applications>NASA</a>でも使用</li></ul>
+                                <li><strong>PostScript (印刷技術・PDFレンダリング)</strong></li>
+                            </ul>
+                        </li>
+                    </ul>
+                    <img src="https://www.forth.com/wp-content/uploads/2021/07/FORTH-Inc-with-graphic-tm-1200.png"/ width="600mm">
+                </section>
+
+                <section>
+                    <h3>Forthの特徴</h3>
+                    <div style="text-align: left;">
+                        <p><strong>1. スタックベースの計算</strong></p>
+                        <p class="small">すべての演算はスタック（LIFO）を介して行われる</p>
+
+                        <p class="fragment"><strong>2. 逆ポーランド記法（RPN）</strong></p>
+                        <div class="fragment">
+                            <table>
+                                <tr>
+                                    <th>通常の記法</th>
+                                    <th>Forth</th>
+                                </tr>
+                                <tr>
+                                    <td>(3 + 4) * 2</td>
+                                    <td>3 4 + 2 *</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <p class="fragment"><strong>3. 単純で拡張可能</strong></p>
+                        <p class="fragment small">基本的な「ワード」の組み合わせで新しいワードを定義</p>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>なぜForthを学ぶのか？</h3>
+                    <ol>
+                        <li class="fragment"><strong>インタプリタの基礎</strong><br>
+                            <span class="small">シンプルな構文で実装原理を学びやすい</span></li>
+                        <li class="fragment"><strong>スタック機械の理解</strong><br>
+                            <span class="small">Java VM、Python VM、WebAssembly などで採用</span></li>
+                        <li class="fragment"><strong>言語設計の思想</strong><br>
+                            <span class="small">最小限の機能で最大限の表現力</span></li>
+                    </ol>
+                </section>
+            </section>
+
+            <!-- セクション1: 動的言語とインタプリタ -->
+            <section>
+                <section>
+                    <h2>2. 動的言語とインタプリタ</h2>
+                </section>
+
+                <section>
+                    <h3>プログラムの実行方式</h3>
+                    <div class="compare-container">
+                        <div class="compare-box compiler" style="font-size: 0.75em">
+                            <h4>コンパイラ</h4>
+                            <div class="compare-flow">
+                                <div class="step code">ソースコード</div>
+                                <div class="arrow">↓</div>
+                                <div class="step tool">コンパイラ</div>
+                                <div class="arrow">↓</div>
+                                <div class="step code">機械語（実行ファイル）</div>
+                                <div class="arrow">↓</div>
+                                <div class="step result">実行結果</div>
+                            </div>
+                            <div class="examples">例: C, C++, Rust, Go</div>
+                        </div>
+                        <div class="compare-box interpreter" style="font-size: 0.75em">
+                            <h4>インタプリタ</h4>
+                            <div class="compare-flow">
+                                <div class="step code">ソースコード</div>
+                                <div class="arrow">↓</div>
+                                <div class="step tool">インタプリタ</div>
+                                <div class="arrow">↓</div>
+                                <div class="step result">実行結果</div>
+                                <div style="font-size: 0.75em; color: #666; margin-top: 10px;">
+                                    （読みながら即座に実行）
+                                </div>
+                            </div>
+                            <div class="examples">例: Python, Ruby, JavaScript, <strong>Forth</strong></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>インタプリタの基本構造</h3>
+                    <div class="lexer-container" style="font-size: 0.75em">
+                        <div class="lexer-row">
+                            <div class="lexer-input">"3 4 + 2 *"</div>
+                            <div class="big-arrow">→</div>
+                            <div class="lexer-process">
+                                <div class="title">字句解析</div>
+                                <div class="sub">Lexical Analysis</div>
+                            </div>
+                            <div class="big-arrow">→</div>
+                            <div class="lexer-output">
+                                <div class="lexer-token">"3"</div>
+                                <div class="lexer-token">"4"</div>
+                                <div class="lexer-token">"+"</div>
+                                <div class="lexer-token">"2"</div>
+                                <div class="lexer-token">"*"</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="highlight-box">
+                        <strong>Forthの場合</strong>: 字句解析は非常にシンプル<br>
+                        → 空白で文字列を分割するだけ！ <code>code.split()</code>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>ディスパッチループ (Dispatch Loop)</h3>
+                    <div class="eval-loop-container" style="font-size: 0.75em">
+                        <div class="eval-main-flow">
+                            <div class="eval-box read">READ</div>
+                            <div class="flow-arrow">→</div>
+                            <div class="eval-box get">トークンを<br>1つ取得</div>
+                            <div class="flow-arrow">→</div>
+                            <div class="eval-box eval">EVAL<br>(評価)</div>
+                            <div class="flow-arrow" style="color: #999;">↩︎ 繰り返し</div>
+                        </div>
+                        <div style="text-align: center; margin: 10px 0; color: #666;">↓ EVAL の際にトークンの種類で分岐 (Dispatch)</div>
+                        <div class="eval-branches">
+                            <div class="eval-branch">
+                                <div class="condition">数値？</div>
+                                <div class="action">→ プッシュ</div>
+                            </div>
+                            <div class="eval-branch">
+                                <div class="condition">演算子？</div>
+                                <div class="action">→ 演算実行</div>
+                            </div>
+                            <div class="eval-branch">
+                                <div class="condition">ワード？</div>
+                                <div class="action">→ 定義実行</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>Pythonでの実装パターン</h3>
+                    <pre><code class="python" data-trim>
+def forth_eval(stack, code):
+    tokens = code.split()  # 字句解析
+    
+    for token in tokens:   # 評価ループ
+        if 数値なら:
+            スタックにプッシュ
+        elif 演算子なら:
+            スタックから値を取り出して演算
+        elif 定義済みワードなら:
+            そのワードの本体を実行
+                    </code></pre>
+                </section>
+
+                <section>
+                    <h3>動的言語の特徴</h3>
+                    <div style="text-align: left;">
+                        <p><strong>1. 実行時に型が決まる（動的型付け）</strong></p>
+                        <pre><code class="python" data-trim>
+x = 10        # xは整数
+x = "hello"   # 同じxが文字列に（エラーなし）
+                        </code></pre>
+
+                        <p class="fragment"><strong>2. 実行時にプログラムを変更できる</strong></p>
+                        <pre class="fragment"><code class="forth" data-trim>
+: SQUARE DUP * ;   ( 実行中に新しい命令を定義 )
+5 SQUARE .         ( すぐに使える → 出力: 25 )
+                        </code></pre>
+
+                        <p class="fragment"><strong>3. 対話的な開発が可能（REPL）</strong></p>
+                        <pre class="fragment"><code data-trim>
+> 3 4 +     ← 入力
+7           ← 即座に結果
+                        </code></pre>
+                    </div>
+                </section>
+            </section>
+
+            <!-- セクション3: スタックとForthでの使い方 -->
+            <section>
+                <section>
+                    <h2>3. スタックとForthでの使い方</h2>
+                    <p class="small">（先週の復習）</p>
+                </section>
+
+                <section>
+                    <h3>スタックの基本操作</h3>
+                    <div class="two-column">
+                        <div>
+                            <ul>
+                                <li><strong>push</strong>: 値を追加</li>
+                                <li><strong>pop</strong>: 値を取り出す</li>
+                                <li><strong>peek</strong>: 値を見る（取り出さない）</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <div class="stack-viz">
+push(1): [1]<br>
+push(2): [1, 2]<br>
+push(3): [1, 2, 3] ← top<br>
+pop():   [1, 2] → 3を取得<br>
+pop():   [1] → 2を取得
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>Forthでの計算: <code>3 4 +</code></h3>
+                    <table>
+                        <tr>
+                            <th>入力</th>
+                            <th>操作</th>
+                            <th>スタック</th>
+                        </tr>
+                        <tr class="fragment">
+                            <td><code>3</code></td>
+                            <td>3をプッシュ</td>
+                            <td>[3]</td>
+                        </tr>
+                        <tr class="fragment">
+                            <td><code>4</code></td>
+                            <td>4をプッシュ</td>
+                            <td>[3, 4]</td>
+                        </tr>
+                        <tr class="fragment">
+                            <td><code>+</code></td>
+                            <td>2つポップして加算、結果をプッシュ</td>
+                            <td>[7]</td>
+                        </tr>
+                    </table>
+                </section>
+
+                <section>
+                    <h3>Forthでの計算: <code>3 4 + 2 *</code></h3>
+                    <p class="small">通常の記法: (3 + 4) × 2 = 14</p>
+                    <table>
+                        <tr>
+                            <th>入力</th>
+                            <th>スタック</th>
+                        </tr>
+                        <tr class="fragment">
+                            <td><code>3</code></td>
+                            <td>[3]</td>
+                        </tr>
+                        <tr class="fragment">
+                            <td><code>4</code></td>
+                            <td>[3, 4]</td>
+                        </tr>
+                        <tr class="fragment">
+                            <td><code>+</code></td>
+                            <td>[7]</td>
+                        </tr>
+                        <tr class="fragment">
+                            <td><code>2</code></td>
+                            <td>[7, 2]</td>
+                        </tr>
+                        <tr class="fragment">
+                            <td><code>*</code></td>
+                            <td>[14]</td>
+                        </tr>
+                    </table>
+                </section>
+
+                <section>
+                    <h3>スタック操作関数（先週の復習）</h3>
+                    <pre><code class="python" data-trim data-line-numbers>
+def stack_new():
+    return []
+
+def stack_push(stack, value):
+    stack.append(value)
+
+def stack_pop(stack):
+    if len(stack) == 0:
+        raise IndexError("Stack underflow")
+    return stack.pop()
+
+def stack_peek(stack):
+    if len(stack) == 0:
+        raise IndexError("Stack underflow")
+    return stack[-1]
+                    </code></pre>
+                </section>
+            </section>
+
+            <!-- セクション4: 参照実装 -->
+            <section>
+                <section>
+                    <h2>4. 参照実装</h2>
+                    <p>数値と四則演算のみの最小限の実装</p>
+                </section>
+
+                <section>
+                    <h3>基本的なインタプリタ</h3>
+                    <pre><code class="python" data-trim data-line-numbers="1-4|5|7|8-16|17-30|17-20|21-24|25-27|28-30">
+def forth_eval(stack, code):
+    """
+    Forthコードを評価する (最小実装)
+    """
+    tokens = code.split()  # 字句解析
+    
+    for token in tokens:   # 評価ループ
+        # 数値の場合：スタックにプッシュ
+        try:
+            num = int(token)
+            stack_push(stack, num)
+            continue
+        except ValueError:
+            pass
+
+        # 演算子の場合
+        if token == '+':
+            b = stack_pop(stack)
+            a = stack_pop(stack)
+            stack_push(stack, a + b)
+        elif token == '-':
+            b = stack_pop(stack)
+            a = stack_pop(stack)
+            stack_push(stack, a - b)
+        elif token == '*':
+            b, a = stack_pop(stack), stack_pop(stack)
+            stack_push(stack, a * b)
+        elif token == '/':
+            b, a = stack_pop(stack), stack_pop(stack)
+            stack_push(stack, a // b)
+                    </code></pre>
+                </section>
+
+                <section>
+                    <h3>動作確認</h3>
+                    <pre><code class="python" data-trim>
+>>> stack = stack_new()
+>>> forth_eval(stack, "3 4 +")
+>>> print(stack)
+[7]
+
+>>> stack = stack_new()
+>>> forth_eval(stack, "3 4 + 2 *")
+>>> print(stack)
+[14]
+
+>>> stack = stack_new()
+>>> forth_eval(stack, "10 3 -")
+>>> print(stack)
+[7]
+                    </code></pre>
+                </section>
+            </section>
+
+            <!-- セクション5: 演習問題 -->
+            <section>
+                <section>
+                    <h2>5. 演習問題</h2>
+                </section>
+
+                <section>
+                    <h3>課題1: スタック操作ワード</h3>
+                    <table>
+                        <tr>
+                            <th>ワード</th>
+                            <th>動作</th>
+                            <th>スタック変化</th>
+                        </tr>
+                        <tr>
+                            <td><code>.</code></td>
+                            <td>トップを出力して削除</td>
+                            <td>(a → )</td>
+                        </tr>
+                        <tr>
+                            <td><code>DUP</code></td>
+                            <td>トップを複製</td>
+                            <td>(a → a a)</td>
+                        </tr>
+                        <tr>
+                            <td><code>DROP</code></td>
+                            <td>トップを削除</td>
+                            <td>(a → )</td>
+                        </tr>
+                        <tr>
+                            <td><code>SWAP</code></td>
+                            <td>上位2つを交換</td>
+                            <td>(a b → b a)</td>
+                        </tr>
+                        <tr>
+                            <td><code>OVER</code></td>
+                            <td>2番目をコピー</td>
+                            <td>(a b → a b a)</td>
+                        </tr>
+                        <tr>
+                            <td><code>ROT</code></td>
+                            <td>3番目をトップへ</td>
+                            <td>(a b c → b c a)</td>
+                        </tr>
+                    </table>
+                </section>
+
+                <section>
+                    <h3>課題2: ユーザ定義ワード（35分）</h3>
+                    <p><code>: NAME ... ;</code> で新しいワードを定義</p>
+                    <pre><code class="forth" data-trim>
+: SQUARE DUP * ;     ( 2乗を計算するワードを定義 )
+5 SQUARE .           ( 25を出力 )
+
+: DOUBLE DUP + ;
+: QUADRUPLE DOUBLE DOUBLE ;
+5 QUADRUPLE .        ( 20を出力 )
+                    </code></pre>
+                    <div class="highlight-box fragment">
+                        <strong>ポイント</strong>: 辞書（dictionary）にワード名と本体を保存
+                    </div>
+                </section>
+
+                <section>
+                    <h3>発展課題</h3>
+                    <ul>
+                        <li><strong>発展1</strong>: 比較演算子（<code>&lt;</code>, <code>&gt;</code>, <code>=</code>）</li>
+                        <li><strong>発展2</strong>: 追加のスタック操作（<code>2DUP</code>, <code>NIP</code>, <code>TUCK</code>）</li>
+                        <li><strong>発展3</strong>: コメント機能（<code>( ... )</code>）</li>
+                    </ul>
+                </section>
+            </section>
+
+            <!-- まとめ -->
+            <section>
+                <h2>まとめ</h2>
+                <ul>
+                    <li><strong>インタプリタ</strong>: 字句解析 &#8674; ディスパッチループ &#8674; 結果</li>
+                    <li><strong>動的言語</strong>: 実行時に拡張可能</li>
+                    <li><strong>Forth</strong>:</li>
+                    <ul>
+                        <li>プログラム: 逆ポーランド記法</li>
+                        <li>処理系: スタックをデータ処理に用いるインタプリタ</li>
+                    </ul>
+                </ul>
+                <div class="highlight-box fragment">
+                    今週の目標: Forthインタプリタを自分で実装する
+                    <ul>
+                        <li>残り時間: ノートブックを開いて演習問題に取り組む</li>
+                    </ul>
+                </div>                
+            </section>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/highlight/highlight.min.js"></script>
+    <script>
+        Reveal.initialize({
+            hash: true,
+            slideNumber: true,
+            plugins: [ RevealHighlight ],
+            transition: 'slide',
+            width: 1200,
+            height: 700,            
+        });
+        Reveal.configure({ pdfSeparateFragments: false });
+    </script>
+</body>
+</html>
